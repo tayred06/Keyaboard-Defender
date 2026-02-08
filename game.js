@@ -4,9 +4,9 @@
 
 (() => {
     // --- Constants ---
-    const CORNER_COLORS = ['#e94560', '#00d4ff', '#00e676', '#ffd700'];
-    const BG_COLOR = '#0f0f1a';
-    const GRID_COLOR = 'rgba(255,255,255,0.03)';
+    const CORNER_COLORS = ['#ff0055', '#00f0ff', '#00ff88', '#aa44ff'];
+    const BG_COLOR = '#050a14';
+    const GRID_COLOR = 'rgba(0, 240, 255, 0.04)';
     const BASE_RADIUS = 28;
     const ENEMY_RADIUS = 18;
     const HIT_DISTANCE = 36;
@@ -23,6 +23,7 @@
     const COMBO_WINDOW = 0.8;
     const COMBO_BONUS = 5;
     const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const FONT = '"Orbitron", "Courier New", monospace';
     const KB_ROWS = [
         ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
         ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
@@ -34,6 +35,7 @@
     const ctx = canvas.getContext('2d');
     let W, H, centerX, centerY;
     let dpr = window.devicePixelRatio || 1;
+    let gameTime = 0;
 
     function resizeCanvas() {
         const rect = canvas.getBoundingClientRect();
@@ -44,6 +46,19 @@
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         centerX = W / 2;
         centerY = H / 2;
+    }
+
+    // --- Hex helper ---
+    function drawHexagon(cx, cy, r, rotation) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI / 3) * i + (rotation || 0);
+            const x = cx + r * Math.cos(angle);
+            const y = cy + r * Math.sin(angle);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
     }
 
     // --- Game state ---
@@ -79,6 +94,8 @@
             this.alive = true;
             this.opacity = 0;
             this.age = 0;
+            this.rotation = Math.random() * Math.PI * 2;
+            this.rotSpeed = (Math.random() - 0.5) * 2;
 
             const margin = 40;
             switch (corner) {
@@ -88,20 +105,28 @@
                 case 3: this.x = -margin; this.y = H + margin; break;
             }
 
-            // Add slight random offset to avoid stacking
             this.x += (Math.random() - 0.5) * 60;
             this.y += (Math.random() - 0.5) * 60;
 
             const angle = Math.atan2(centerY - this.y, centerX - this.x);
             this.vx = Math.cos(angle) * speed;
             this.vy = Math.sin(angle) * speed;
+
+            // Trail
+            this.trail = [];
         }
 
         update(dt) {
+            // Store trail positions
+            this.trail.push({ x: this.x, y: this.y, age: 0 });
+            if (this.trail.length > 6) this.trail.shift();
+            for (const t of this.trail) t.age += dt;
+
             this.x += this.vx * dt;
             this.y += this.vy * dt;
             this.age += dt;
             this.opacity = Math.min(1, this.age / 0.3);
+            this.rotation += this.rotSpeed * dt;
         }
 
         distToCenter() {
@@ -109,31 +134,50 @@
         }
 
         draw(ctx) {
+            // Trail
+            for (let i = 0; i < this.trail.length; i++) {
+                const t = this.trail[i];
+                const alpha = (i / this.trail.length) * 0.12 * this.opacity;
+                ctx.globalAlpha = alpha;
+                drawHexagon(t.x, t.y, this.radius * 0.7, this.rotation);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+
             ctx.globalAlpha = this.opacity;
 
             // Outer glow
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius + 6, 0, Math.PI * 2);
+            drawHexagon(this.x, this.y, this.radius + 8, this.rotation);
             ctx.fillStyle = this.color;
-            ctx.globalAlpha = this.opacity * 0.15;
+            ctx.globalAlpha = this.opacity * 0.08;
             ctx.fill();
 
             // Body
             ctx.globalAlpha = this.opacity;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            drawHexagon(this.x, this.y, this.radius, this.rotation);
             ctx.fillStyle = BG_COLOR;
             ctx.fill();
             ctx.strokeStyle = this.color;
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Inner hex decoration
+            ctx.globalAlpha = this.opacity * 0.15;
+            drawHexagon(this.x, this.y, this.radius * 0.7, -this.rotation);
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 0.5;
             ctx.stroke();
 
             // Letter
+            ctx.globalAlpha = this.opacity;
             ctx.fillStyle = this.color;
-            ctx.font = 'bold 18px "Segoe UI", Arial, sans-serif';
+            ctx.font = `bold 15px ${FONT}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 10;
             ctx.fillText(this.letter, this.x, this.y + 1);
+            ctx.shadowBlur = 0;
 
             ctx.globalAlpha = 1;
         }
@@ -141,34 +185,49 @@
 
     // --- Particle ---
     class Particle {
-        constructor(x, y, color) {
+        constructor(x, y, color, type) {
             this.x = x;
             this.y = y;
+            this.type = type || 'normal';
             const angle = Math.random() * Math.PI * 2;
-            const speed = 60 + Math.random() * 140;
+            const speed = this.type === 'ring' ? 20 + Math.random() * 40 : 80 + Math.random() * 160;
             this.vx = Math.cos(angle) * speed;
             this.vy = Math.sin(angle) * speed;
-            this.life = 0.4 + Math.random() * 0.4;
+            this.life = this.type === 'ring' ? 0.3 : 0.5 + Math.random() * 0.4;
             this.maxLife = this.life;
-            this.radius = 2 + Math.random() * 3;
+            this.radius = this.type === 'ring' ? 1 + Math.random() * 1.5 : 1.5 + Math.random() * 2.5;
             this.color = color;
         }
 
         update(dt) {
             this.x += this.vx * dt;
             this.y += this.vy * dt;
-            this.vx *= 0.97;
-            this.vy *= 0.97;
+            this.vx *= 0.96;
+            this.vy *= 0.96;
             this.life -= dt;
         }
 
         draw(ctx) {
             const alpha = Math.max(0, this.life / this.maxLife);
             ctx.globalAlpha = alpha;
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius * alpha, 0, Math.PI * 2);
-            ctx.fillStyle = this.color;
-            ctx.fill();
+
+            if (this.type === 'line') {
+                // Draw a small line in direction of velocity
+                const len = 4 * alpha;
+                const norm = Math.hypot(this.vx, this.vy) || 1;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x - (this.vx / norm) * len, this.y - (this.vy / norm) * len);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.radius * alpha;
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius * alpha, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+
             ctx.globalAlpha = 1;
         }
     }
@@ -193,10 +252,13 @@
             const alpha = Math.max(0, this.life / this.maxLife);
             ctx.globalAlpha = alpha;
             ctx.fillStyle = this.color;
-            ctx.font = 'bold 16px "Segoe UI", Arial, sans-serif';
+            ctx.font = `bold 13px ${FONT}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 8;
             ctx.fillText(this.text, this.x, this.y);
+            ctx.shadowBlur = 0;
             ctx.globalAlpha = 1;
         }
     }
@@ -239,7 +301,6 @@
         letter = letter.toUpperCase();
         if (letter.length !== 1 || letter < 'A' || letter > 'Z') return;
 
-        // Find the closest enemy to center with this letter
         let closest = null;
         let closestDist = Infinity;
 
@@ -261,9 +322,13 @@
     function killEnemy(enemy) {
         enemy.alive = false;
 
-        // Particles
-        for (let i = 0; i < 12; i++) {
-            state.particles.push(new Particle(enemy.x, enemy.y, enemy.color));
+        // Explosion particles — lines radiating out
+        for (let i = 0; i < 10; i++) {
+            state.particles.push(new Particle(enemy.x, enemy.y, enemy.color, 'line'));
+        }
+        // Dot particles
+        for (let i = 0; i < 6; i++) {
+            state.particles.push(new Particle(enemy.x, enemy.y, enemy.color, 'normal'));
         }
 
         // Combo
@@ -291,9 +356,8 @@
         state.shakeIntensity = 6;
         state.baseHitFlash = 0.3;
 
-        // Red flash particles
         for (let i = 0; i < 8; i++) {
-            state.particles.push(new Particle(centerX, centerY, '#ff0000'));
+            state.particles.push(new Particle(centerX, centerY, '#ff0055', 'normal'));
         }
 
         if (state.lives <= 0) {
@@ -305,27 +369,25 @@
     function update(dt) {
         if (state.gameOver) return;
 
-        // Wave pause
+        gameTime += dt;
+
         if (state.inWavePause) {
             state.wavePauseTimer -= dt;
             state.waveAnnounceTimer = state.wavePauseTimer;
             if (state.wavePauseTimer <= 0) {
                 startWave();
             }
-            // Still update particles and texts during pause
             updateParticles(dt);
             updateFloatingTexts(dt);
             return;
         }
 
-        // Spawn enemies
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0 && state.enemiesLeftInWave > 0) {
             spawnEnemy();
             state.spawnTimer = getSpawnInterval();
         }
 
-        // Update enemies
         for (const enemy of state.enemies) {
             if (!enemy.alive) continue;
             enemy.update(dt);
@@ -336,23 +398,19 @@
             }
         }
 
-        // Remove dead enemies
         state.enemies = state.enemies.filter(e => e.alive);
 
-        // Check wave complete
         if (state.enemiesLeftInWave <= 0 && state.enemies.length === 0) {
             state.wave++;
             state.inWavePause = true;
             state.wavePauseTimer = WAVE_PAUSE;
         }
 
-        // Combo timer
         if (state.comboTimer > 0) {
             state.comboTimer -= dt;
             if (state.comboTimer <= 0) state.combo = 0;
         }
 
-        // Shake timer
         if (state.shakeTimer > 0) state.shakeTimer -= dt;
         if (state.baseHitFlash > 0) state.baseHitFlash -= dt;
 
@@ -387,11 +445,17 @@
         ctx.fillStyle = BG_COLOR;
         ctx.fillRect(-10, -10, W + 20, H + 20);
 
+        // Vignette
+        drawVignette();
+
         // Grid
         drawGrid();
 
         // Corner indicators
         drawCornerIndicators();
+
+        // Radial lines from center (subtle)
+        drawRadialLines();
 
         // Base
         drawBase();
@@ -407,6 +471,9 @@
         // Floating texts
         for (const t of state.floatingTexts) t.draw(ctx);
 
+        // Scanlines
+        drawScanlines();
+
         // HUD
         drawHUD();
 
@@ -418,18 +485,32 @@
         ctx.restore();
     }
 
+    function drawVignette() {
+        const maxDim = Math.max(W, H);
+        const grad = ctx.createRadialGradient(centerX, centerY, maxDim * 0.2, centerX, centerY, maxDim * 0.8);
+        grad.addColorStop(0, 'transparent');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, H);
+    }
+
     function drawGrid() {
-        ctx.strokeStyle = GRID_COLOR;
-        ctx.lineWidth = 1;
         const gridSize = 50;
 
+        // Vertical lines
+        ctx.lineWidth = 1;
         for (let x = gridSize; x < W; x += gridSize) {
+            const distFromCenter = Math.abs(x - centerX) / (W / 2);
+            ctx.strokeStyle = `rgba(0, 240, 255, ${0.05 * (1 - distFromCenter * 0.7)})`;
             ctx.beginPath();
             ctx.moveTo(x, 0);
             ctx.lineTo(x, H);
             ctx.stroke();
         }
+        // Horizontal lines
         for (let y = gridSize; y < H; y += gridSize) {
+            const distFromCenter = Math.abs(y - centerY) / (H / 2);
+            ctx.strokeStyle = `rgba(0, 240, 255, ${0.05 * (1 - distFromCenter * 0.7)})`;
             ctx.beginPath();
             ctx.moveTo(0, y);
             ctx.lineTo(W, y);
@@ -437,9 +518,24 @@
         }
     }
 
+    function drawRadialLines() {
+        const count = 8;
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 / count) * i;
+            const len = Math.max(W, H);
+            ctx.globalAlpha = 0.03;
+            ctx.strokeStyle = '#00f0ff';
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX + Math.cos(angle) * len, centerY + Math.sin(angle) * len);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+    }
+
     function drawCornerIndicators() {
-        const size = 60;
-        const alpha = 0.08;
+        const size = 80;
         const positions = [
             [0, 0], [W, 0], [W, H], [0, H]
         ];
@@ -448,79 +544,173 @@
             const grad = ctx.createRadialGradient(px, py, 0, px, py, size);
             grad.addColorStop(0, CORNER_COLORS[i]);
             grad.addColorStop(1, 'transparent');
-            ctx.globalAlpha = alpha;
+            ctx.globalAlpha = 0.1;
             ctx.fillStyle = grad;
             ctx.fillRect(px - size, py - size, size * 2, size * 2);
+
+            // Corner bracket decoration
+            ctx.globalAlpha = 0.2;
+            ctx.strokeStyle = CORNER_COLORS[i];
+            ctx.lineWidth = 1;
+            const bLen = 18;
+            const bOff = 6;
+            const sx = px === 0 ? bOff : px - bOff;
+            const sy = py === 0 ? bOff : py - bOff;
+            const dx = px === 0 ? 1 : -1;
+            const dy = py === 0 ? 1 : -1;
+            ctx.beginPath();
+            ctx.moveTo(sx + dx * bLen, sy);
+            ctx.lineTo(sx, sy);
+            ctx.lineTo(sx, sy + dy * bLen);
+            ctx.stroke();
         }
         ctx.globalAlpha = 1;
     }
 
     function drawBase() {
-        // Outer glow
-        const glowRadius = BASE_RADIUS + 20 + Math.sin(Date.now() / 500) * 4;
-        const grad = ctx.createRadialGradient(centerX, centerY, BASE_RADIUS, centerX, centerY, glowRadius);
-        grad.addColorStop(0, 'rgba(255,255,255,0.1)');
+        const pulse = Math.sin(gameTime * 3) * 0.15 + 0.85;
+        const slowRot = gameTime * 0.3;
+
+        // Outer rotating ring
+        ctx.globalAlpha = 0.08;
+        drawHexagon(centerX, centerY, BASE_RADIUS + 22, slowRot);
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+
+        // Middle rotating ring (opposite direction)
+        ctx.globalAlpha = 0.12;
+        drawHexagon(centerX, centerY, BASE_RADIUS + 14, -slowRot * 1.5);
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+
+        // Glow
+        const glowR = BASE_RADIUS + 20;
+        const grad = ctx.createRadialGradient(centerX, centerY, BASE_RADIUS * 0.5, centerX, centerY, glowR);
+        grad.addColorStop(0, `rgba(0, 240, 255, ${0.08 * pulse})`);
         grad.addColorStop(1, 'transparent');
+        ctx.globalAlpha = 1;
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, glowRadius, 0, Math.PI * 2);
+        ctx.arc(centerX, centerY, glowR, 0, Math.PI * 2);
         ctx.fill();
 
         // Hit flash
         if (state.baseHitFlash > 0) {
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, BASE_RADIUS + 10, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 0, 0, ${state.baseHitFlash})`;
+            drawHexagon(centerX, centerY, BASE_RADIUS + 10, 0);
+            ctx.fillStyle = `rgba(255, 0, 85, ${state.baseHitFlash})`;
             ctx.fill();
         }
 
-        // Base circle
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, BASE_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = '#1a1a2e';
+        // Base hexagon
+        drawHexagon(centerX, centerY, BASE_RADIUS, 0);
+        ctx.fillStyle = BG_COLOR;
         ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = `rgba(0, 240, 255, ${0.5 * pulse})`;
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Inner hex
+        drawHexagon(centerX, centerY, BASE_RADIUS * 0.5, slowRot);
+        ctx.strokeStyle = `rgba(0, 240, 255, ${0.15 * pulse})`;
+        ctx.lineWidth = 0.5;
         ctx.stroke();
 
-        // Inner icon (shield shape)
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px "Segoe UI", Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('⛊', centerX, centerY);
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0, 240, 255, ${0.6 * pulse})`;
+        ctx.fill();
+    }
+
+    function drawScanlines() {
+        ctx.globalAlpha = 0.03;
+        ctx.fillStyle = '#000';
+        for (let y = 0; y < H; y += 3) {
+            ctx.fillRect(0, y, W, 1);
+        }
+        ctx.globalAlpha = 1;
     }
 
     function drawHUD() {
-        const pad = 16;
+        const pad = 14;
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 6;
 
         // Score (top-left)
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 20px "Segoe UI", Arial, sans-serif';
+        ctx.fillStyle = '#00f0ff';
+        ctx.font = `bold 14px ${FONT}`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText(`Score : ${state.score}`, pad, pad);
+        ctx.fillText(`SCORE`, pad, pad);
+        ctx.font = `bold 20px ${FONT}`;
+        ctx.fillText(`${state.score}`, pad, pad + 18);
 
         // Wave (top-center)
         ctx.textAlign = 'center';
-        ctx.fillText(`Vague ${state.wave}`, W / 2, pad);
+        ctx.font = `bold 11px ${FONT}`;
+        ctx.fillStyle = 'rgba(0, 240, 255, 0.5)';
+        ctx.fillText(`VAGUE`, W / 2, pad);
+        ctx.font = `bold 18px ${FONT}`;
+        ctx.fillStyle = '#00f0ff';
+        ctx.fillText(`${state.wave}`, W / 2, pad + 16);
 
         // Lives (top-right)
         ctx.textAlign = 'right';
-        let livesText = '';
+        ctx.font = `bold 11px ${FONT}`;
+        ctx.fillStyle = state.lives <= 1 ? '#ff0055' : 'rgba(0, 240, 255, 0.5)';
+        ctx.fillText(`SHIELD`, W - pad, pad);
+
+        // Draw life bars
+        const barW = 12;
+        const barH = 4;
+        const barGap = 3;
+        const totalW = MAX_LIVES * (barW + barGap) - barGap;
+        const barStartX = W - pad - totalW;
+        const barY = pad + 18;
         for (let i = 0; i < MAX_LIVES; i++) {
-            livesText += i < state.lives ? '♥' : '♡';
+            const bx = barStartX + i * (barW + barGap);
+            if (i < state.lives) {
+                ctx.fillStyle = state.lives <= 1 ? '#ff0055' : '#00f0ff';
+                ctx.shadowColor = state.lives <= 1 ? '#ff0055' : '#00f0ff';
+            } else {
+                ctx.fillStyle = 'rgba(0, 240, 255, 0.1)';
+                ctx.shadowColor = 'transparent';
+            }
+            ctx.fillRect(bx, barY, barW, barH);
         }
-        ctx.fillStyle = state.lives <= 1 ? '#e94560' : '#fff';
-        ctx.fillText(livesText, W - pad, pad);
+
+        ctx.shadowBlur = 0;
 
         // Combo indicator
         if (state.combo > 1 && state.comboTimer > 0) {
             ctx.textAlign = 'center';
-            ctx.fillStyle = '#ffd700';
-            ctx.font = 'bold 16px "Segoe UI", Arial, sans-serif';
-            ctx.fillText(`Combo x${state.combo}`, W / 2, pad + 28);
+            ctx.fillStyle = '#aa44ff';
+            ctx.font = `bold 13px ${FONT}`;
+            ctx.shadowColor = '#aa44ff';
+            ctx.shadowBlur = 8;
+            ctx.fillText(`COMBO x${state.combo}`, W / 2, pad + 38);
+            ctx.shadowBlur = 0;
         }
+
+        // HUD decorative lines
+        ctx.globalAlpha = 0.1;
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 0.5;
+        // Top line
+        ctx.beginPath();
+        ctx.moveTo(pad, pad + 42);
+        ctx.lineTo(pad + 80, pad + 42);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(W - pad, pad + 42);
+        ctx.lineTo(W - pad - 80, pad + 42);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
     }
 
     function drawWaveAnnounce() {
@@ -529,15 +719,32 @@
 
         const alpha = Math.min(1, t / (WAVE_PAUSE * 0.5));
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
+
+        // Horizontal lines flanking text
+        const lineW = 60;
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(centerX - lineW - 60, centerY - 65);
+        ctx.lineTo(centerX - 60, centerY - 65);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(centerX + 60, centerY - 65);
+        ctx.lineTo(centerX + lineW + 60, centerY - 65);
+        ctx.stroke();
+
+        ctx.fillStyle = '#00f0ff';
+        ctx.font = `900 30px ${FONT}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`Vague ${state.wave}`, centerX, centerY - 70);
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 20;
+        ctx.fillText(`VAGUE ${state.wave}`, centerX, centerY - 65);
+        ctx.shadowBlur = 0;
 
-        ctx.font = '18px "Segoe UI", Arial, sans-serif';
-        ctx.fillStyle = '#aaa';
-        ctx.fillText('Préparez-vous...', centerX, centerY - 35);
+        ctx.font = `400 12px ${FONT}`;
+        ctx.fillStyle = 'rgba(0, 240, 255, 0.4)';
+        ctx.fillText('INITIALISATION...', centerX, centerY - 35);
         ctx.globalAlpha = 1;
     }
 
@@ -562,6 +769,7 @@
         state.running = true;
         state.baseHitFlash = 0;
         state.lastTimestamp = 0;
+        gameTime = 0;
     }
 
     function gameOver() {
@@ -587,7 +795,6 @@
         let dt = (timestamp - state.lastTimestamp) / 1000;
         state.lastTimestamp = timestamp;
 
-        // Clamp dt to avoid jumps
         if (dt > 0.1) dt = 0.1;
 
         update(dt);
@@ -596,7 +803,6 @@
         if (!state.gameOver) {
             requestAnimationFrame(gameLoop);
         } else {
-            // Render one final frame
             render();
         }
     }
@@ -626,7 +832,6 @@
                     btn.classList.remove('pressed');
                 });
 
-                // Mouse fallback for testing on desktop
                 btn.addEventListener('mousedown', (e) => {
                     e.preventDefault();
                     btn.classList.add('pressed');
@@ -659,14 +864,12 @@
 
     // --- Event listeners ---
     function setupInputs() {
-        // Physical keyboard
         document.addEventListener('keydown', (e) => {
             if (e.repeat) return;
             const key = e.key.toUpperCase();
             if (key.length === 1 && key >= 'A' && key <= 'Z') {
                 attackLetter(key);
 
-                // Visual feedback on virtual keyboard if visible
                 const btn = document.querySelector(`.kb-key[data-key="${key}"]`);
                 if (btn) {
                     btn.classList.add('pressed');
@@ -675,18 +878,15 @@
             }
         });
 
-        // Start / Restart buttons
         document.getElementById('start-btn').addEventListener('click', startGame);
         document.getElementById('restart-btn').addEventListener('click', startGame);
 
-        // Prevent zoom on double-tap for mobile
         document.addEventListener('dblclick', (e) => e.preventDefault());
     }
 
     // --- Resize handling ---
     function handleResize() {
         resizeCanvas();
-        // Re-center if game is not running — just render a frame
         if (!state.running) {
             centerX = W / 2;
             centerY = H / 2;
@@ -701,7 +901,6 @@
         setupInputs();
         window.addEventListener('resize', handleResize);
 
-        // Render idle background
         render();
     }
 
