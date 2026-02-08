@@ -27,7 +27,7 @@ body.show-keyboard #gameCanvas {
 
 /* --- Virtual Keyboard --- */
 :root {
-    --kb-height: 160px;
+    --kb-height: 260px;
 }
 
 #virtual-keyboard {
@@ -39,10 +39,11 @@ body.show-keyboard #gameCanvas {
     height: var(--kb-height);
     background: #1a1a2e;
     border-top: 1px solid #2a2a4a;
-    padding: 6px 2px;
+    padding: 10px 4px;
+    padding-bottom: env(safe-area-inset-bottom, 10px);
     z-index: 10;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     justify-content: center;
     align-items: center;
 }
@@ -53,18 +54,21 @@ body.show-keyboard #virtual-keyboard {
 
 .kb-row {
     display: flex;
-    gap: 3px;
+    gap: 5px;
     justify-content: center;
+    width: 100%;
+    padding: 0 4px;
 }
 
 .kb-key {
-    width: 32px;
-    height: 40px;
+    flex: 1;
+    max-width: 42px;
+    height: 52px;
     background: #2a2a4a;
     border: 1px solid #3a3a5a;
-    border-radius: 5px;
+    border-radius: 7px;
     color: #fff;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: bold;
     display: flex;
     align-items: center;
@@ -145,13 +149,17 @@ body.show-keyboard #virtual-keyboard {
 /* --- Responsive --- */
 @media (max-width: 600px) {
     :root {
-        --kb-height: 140px;
+        --kb-height: 240px;
     }
 
     .kb-key {
-        width: 28px;
-        height: 36px;
-        font-size: 13px;
+        height: 48px;
+        font-size: 17px;
+        border-radius: 6px;
+    }
+
+    .kb-row {
+        gap: 4px;
     }
 
     .overlay-content h1 {
@@ -170,13 +178,11 @@ body.show-keyboard #virtual-keyboard {
 
 @media (max-width: 380px) {
     .kb-key {
-        width: 24px;
-        height: 32px;
-        font-size: 11px;
-        gap: 2px;
+        height: 44px;
+        font-size: 15px;
     }
 
     .kb-row {
-        gap: 2px;
+        gap: 3px;
     }
 }
