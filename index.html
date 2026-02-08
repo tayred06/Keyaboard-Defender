@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Keyboard Defender</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="virtual-keyboard"></div>
+
+    <div id="start-screen" class="overlay">
+        <div class="overlay-content">
+            <h1>KEYBOARD<br>DEFENDER</h1>
+            <p>Les ennemis arrivent des 4 coins !</p>
+            <p class="hint">Tapez la lettre correspondante pour les éliminer.</p>
+            <button id="start-btn">JOUER</button>
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="overlay hidden">
+        <div class="overlay-content">
+            <h1>GAME OVER</h1>
+            <p>Score : <span id="final-score">0</span></p>
+            <p>Vague : <span id="final-wave">1</span></p>
+            <button id="restart-btn">REJOUER</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
